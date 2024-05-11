@@ -8,7 +8,7 @@ def setup_logging():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-def load_embedding_model(model_path, dimension, data_path ):
+def load_embedding_model(model_path, dimension, data_path):
 
     logging.info("Loading model and encoding data...")
     model = FlagModel(model_path,
