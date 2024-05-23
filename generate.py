@@ -82,7 +82,7 @@ def main():
     llm = init_model_config(args.model_configs)
 
     # start to generate data
-    for sentence in tqdm(corpus[4029:5000], desc="Data Generated"):
+    for sentence in tqdm(corpus[5000:5002], desc="Data Generated"):
         questions = generate_questions(llm, sentence, args.k)
         relevant_source = get_relevant_source(questions, index, corpus, embedding_model, args.top_k)
         answers = generate_answers(llm, questions, relevant_source, args.k)
