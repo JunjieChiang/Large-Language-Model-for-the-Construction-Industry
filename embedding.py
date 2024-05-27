@@ -1,4 +1,5 @@
 from FlagEmbedding import FlagModel
+import json
 import faiss
 import logging
 import numpy as np
@@ -39,3 +40,9 @@ def load_sentences(file_path):
             sentences.append(line.strip())
 
     return sentences
+
+def load_exam_data(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        data = [json.loads(line) for line in file]
+
+    return data
