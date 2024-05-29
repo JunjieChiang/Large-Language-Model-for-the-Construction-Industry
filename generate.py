@@ -3,7 +3,7 @@ import embedding
 from config import get_args
 from tqdm import tqdm
 from models import *
-
+import process_paper_data
 
 def generate_questions(llm, nowsentence, k):
     """问题生成"""
@@ -132,6 +132,10 @@ if __name__ == "__main__":
 
     llm = init_model_config(args.model_configs)
 
+    # process paper data
+    if args.process_paper_data == "True":
+        process_paper_data.process(args.paper_type, args.paper_path)
+
     # generate data from corpus
     if args.from_corpus == "True":
         embedding_model, index, corpus = embedding.load_embedding_model(args.embedding_model, args.dimension, args.data_path)
@@ -141,3 +145,4 @@ if __name__ == "__main__":
     if args.from_exam_paper == "True":
         examination = embedding.load_exam_data(args.exam_data)
         generate_from_paper(llm=llm, examination_data=examination)
+

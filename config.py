@@ -15,6 +15,7 @@ def get_args():
     # generation source
     parser.add_argument('--from_corpus', type=str, default="False", help='whether to generate data from corpus')
     parser.add_argument('--from_exam_paper', type=str, default="False", help='whether to generate data from test paper')
+    parser.add_argument('--process_paper_data', type=str, default="False", help='process paper data from test')
 
     # generate from corpus
     parser.add_argument('--data_path', type=str, default='example/corpus.txt', help='input data path')
@@ -25,4 +26,9 @@ def get_args():
 
     parser.add_argument('--data_result', type=str, default='result/finetune', help='the save path of generated data path')
 
+    # paper script config
+    parser.add_argument('--paper_path', type=str, default='paper/2018工程管理.txt', help='the generated paper path')
+
+    # 0 represent subject together with answer else separation
+    parser.add_argument('--paper_type', type=int, default=0,help='choose paper type')
     return parser.parse_args()
