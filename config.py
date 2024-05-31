@@ -14,7 +14,8 @@ def get_args():
 
     # generation source
     parser.add_argument('--from_corpus', type=str, default="False", help='whether to generate data from corpus')
-    parser.add_argument('--from_exam_paper', type=str, default="False", help='whether to generate data from test paper')
+    parser.add_argument('--from_choice_question', type=str, default="False", help='whether to generate data from test paper')
+    parser.add_argument('--from_subjective_question', type=str, default='False', help='whether to generate data from subjective question')
 
     # generate from corpus
     parser.add_argument('--data_path', type=str, default='example/corpus.txt', help='input data path')
@@ -22,6 +23,7 @@ def get_args():
 
     # generate from paper test
     parser.add_argument('--exam_data', type=str, default='example/textpaper/merged_output.jsonl', help='the examination data path')
+    parser.add_argument('--subjective_question', type=str, default='example/Statement_1.jsonl', help='the subjective question data path')
 
     parser.add_argument('--data_result', type=str, default='result/finetune', help='the save path of generated data path')
 

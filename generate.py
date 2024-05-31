@@ -53,29 +53,57 @@ def generate_answers(llm, questions, relevant_source, k):
     return answers
 
 
-def generate_from_choice_question(llm, choice_question):
+def process_choice_question(llm, choice_question):
     """从试卷文本中生成Q&A数据"""
     prompt_template = f'''
     任务说明：
-    根据提供的选择题信息，你需要生成一个用于微调的JSON对象。这个JSON对象将包含两个键："query"和"pos"，分别代表经过重新表述的问题和解释。
+    根据提供的选择题信息，你需要生成一个用于微调的JSON对象。这个JSON对象将包含两个键："user"和"response"，分别代表经过重新表述的问题和解释。
     
     以下是给定的题目信息： 
       '{choice_question}'
     
     详细要求如下：
-    - "query": 将提供的问题转换成一个清晰、完整的问句。需要去除原问题中的小括号，并确保问题是直接可回答的形式。例如，如果原问题是“建筑装饰工业化的基础是()”，应转化为“建筑装饰工业化的基础是什么？”
-    - "pos": 该字段应包含一个列表，该列表是一个完整的句子，结合答案选项直接回答"query"中的问题，并使用"solution"字段提供的内容来详细解释答案的原因和逻辑。同时解释中不要引用选项标识(如"A", "B", "C", "D")
+    - "user": 将提供的问题转换成一个清晰、完整的问句。需要去除原问题中的小括号，并确保问题是直接可回答的形式。例如，如果原问题是“建筑装饰工业化的基础是()”，应转化为“建筑装饰工业化的基础是什么？”
+    - "response": 该字段应包含一个列表，该列表是一个完整的句子，结合答案选项直接回答"user"中的问题，并使用"solution"字段提供的内容来详细解释答案的原因和逻辑。同时解释中不要引用选项标识(如"A", "B", "C", "D")
     
     示例输入：
     - 问题: "通过对钢化玻璃进行均质处理可以什么？"
     - 答案解析: "通过对钢化玻璃进行均质处理可以大大降低钢化玻璃的自爆率。"
 
     示例输出：
-    {{"query": "通过对钢化玻璃进行均质处理可以达到什么效果？", "pos": ["通过对钢化玻璃进行均质处理，可以大大降低其自爆率。均质处理通过均匀加热钢化玻璃，使其内部应力均衡，从而减少自爆的可能性。"]}}
+    {{"user": "通过对钢化玻璃进行均质处理可以达到什么效果？", "response": ["通过对钢化玻璃进行均质处理，可以大大降低其自爆率。均质处理通过均匀加热钢化玻璃，使其内部应力均衡，从而减少自爆的可能性。"]}}
     
     注意：
     - 生成的JSON数据应为单行格式，以便于处理和分析
-    - 避免提及选项（A、B、C、D）
+    - 避免提及“因此，答案...”的陈述以及答案选项（A、B、C、D）
+    '''
+
+    answers = llm.get_completion(prompt_template)
+
+    return answers
+
+
+def process_subjective_question(llm, subjective_question):
+    """从试卷文本简答题中生成Q&A数据"""
+    prompt_template = f'''
+    任务说明：
+    根据提供的考点信息，你需要生成一个用于微调的JSON对象。这个JSON对象将包含两个键："user"和"response"，分别代表经过重新表述的问题和解释。
+
+    以下是给定的题目信息： 
+      '{subjective_question}'
+
+    详细要求如下：
+    - "user": 该字段模拟用户的提问，将提供的问题转换成一个清晰、完整的问句，确保问题是直接可回答的形式。
+    - "response": 该字段应包含一个列表，该列表是一个完整的句子。你应该使用"pos"字段提供的内容来详细解释和回答"user"中的问题，需要注意原因和逻辑。
+
+    示例输入：
+    {{"query": 通过对钢化玻璃进行均质处理可以达到什么效果？", "pos": ["通过对钢化玻璃进行均质处理可以大大降低钢化玻璃的自爆率。"]}}
+
+    示例输出：
+    {{"user": "通过对钢化玻璃进行均质处理可以达到什么效果？", "response": ["通过对钢化玻璃进行均质处理，可以大大降低其自爆率。均质处理通过均匀加热钢化玻璃，使其内部应力均衡，从而减少自爆的可能性。"]}}
+
+    注意：
+    - 生成的JSON数据应为单行格式，以便于处理和分析
     '''
 
     answers = llm.get_completion(prompt_template)
@@ -96,9 +124,6 @@ def get_relevant_source(questions, index, corpus, embedding_model, top_k):
 
 
 def generate_from_corpus(llm, corpus, embedding_model, index):
-    if not os.path.exists(args.data_result):
-        os.makedirs(args.data_result)
-
     # start to generate data
     for sentence in tqdm(corpus[5000:5002], desc="Data Generated"):
         questions = generate_questions(llm, sentence, args.k)
@@ -109,16 +134,23 @@ def generate_from_corpus(llm, corpus, embedding_model, index):
             file.write(full_text + '\n')
 
 
-def generate_from_paper(llm, examination_data):
-    if not os.path.exists(args.data_result):
-        os.makedirs(args.data_result)
+def generate_from_choice_question(llm, examination_data):
+    # start to generate data
+    for now_choice_question in tqdm(examination_data[143:], desc="Data Generated"):
+        if 'answer' in now_choice_question and 'A' in now_choice_question['options']:
+            generation = process_choice_question(llm, now_choice_question)
 
-    # start to generate
-    for now_exam in tqdm(examination_data[0:10], desc="Data Generated"):
-        if 'answer' in now_exam and 'A' in now_exam['options']:
-            generation = generate_from_choice_question(llm, now_exam)
+        with open(os.path.join(args.data_result, 'generated_from_choice_question.txt'), 'a', encoding='utf-8') as file:
+            full_text = ''.join(generation)
+            file.write(full_text + '\n')
 
-        with open(os.path.join(args.data_result, 'generated_from_exam.txt'), 'a', encoding='utf-8') as file:
+
+def generate_from_subjective_question(llm, subjective_question):
+    # start to generate data
+    for now_subjective_data in tqdm(subjective_question[158:], desc="Data Generated"):
+        generation = process_subjective_question(llm, now_subjective_data)
+
+        with open(os.path.join(args.data_result, 'generated_from_subjective_question.txt'), 'a', encoding='utf-8') as file:
             full_text = ''.join(generation)
             file.write(full_text + '\n')
 
@@ -130,6 +162,9 @@ if __name__ == "__main__":
     if args.model_configs == None:
         args.model_configs = f"model_configs/{args.generative_model}.json"
 
+    if not os.path.exists(args.data_result):
+        os.makedirs(args.data_result)
+
     llm = init_model_config(args.model_configs)
 
     # generate data from corpus
@@ -138,6 +173,10 @@ if __name__ == "__main__":
         generate_from_corpus(llm=llm, corpus=corpus, embedding_model=embedding_model, index=index)
 
     # generate data from test paper
-    if args.from_exam_paper == "True":
+    if args.from_choice_question == "True":
         examination = embedding.load_exam_data(args.exam_data)
-        generate_from_paper(llm=llm, examination_data=examination)
+        generate_from_choice_question(llm=llm, examination_data=examination)
+
+    if args.from_subjective_question == "True":
+        subjective_question = embedding.load_exam_data(args.subjective_question)
+        generate_from_subjective_question(llm=llm, subjective_question=subjective_question)
