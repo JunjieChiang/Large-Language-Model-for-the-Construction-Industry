@@ -17,5 +17,6 @@ def check_data_consistency(file_path):
                 # 处理可能的其他异常
                 print(f"Unexpected error in line {i + 1}: {e}")
 
+
 # 替换 'path_to_file.jsonl' 为你的文件路径
 check_data_consistency('result/finetune/finetune0520.jsonl')

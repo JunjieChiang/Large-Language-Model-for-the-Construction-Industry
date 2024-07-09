@@ -1,17 +1,19 @@
 from unsloth import FastLanguageModel
 import torch
-from trl import SFTTrainer
+from trl import SFTConfig, SFTTrainer
 from transformers import TrainingArguments
 from datasets import load_dataset
 
 
 max_seq_length = 2048 # Supports RoPE Scaling interally, so choose any!
 
+def formatting_func(record):
+    user = record['user']
+    response = record['response']
 
-# Get LAION dataset
-url = "result/finetune/finetune0520.jsonl"
-dataset = load_dataset("json", data_files = {"train" : url}, split = "train")
+    return f"user: {user}\nresponse: {response}"
 
+dataset = load_dataset("json", data_files="result/finetune/generated_from_subjective_question.jsonl", split="train")
 
 # 4bit pre quantized models we support for 4x faster downloading + no OOMs.
 fourbit_models = [
@@ -28,7 +30,7 @@ fourbit_models = [
 
 
 model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name = "/mnt/d/Model_Checkpoint/llama-2-7b-bnb-4bit",     # unsloth/llama-3-8b-bnb-4bit
+    model_name = "/mnt/d/Model_Checkpoint/Llama3-Chinese-8B-Instruct",     # unsloth/llama-3-8b-bnb-4bit
     max_seq_length = max_seq_length,
     dtype = None,
     load_in_4bit = True,
@@ -52,31 +54,32 @@ model = FastLanguageModel.get_peft_model(
     loftq_config = None, # And LoftQ
 )
 
+sft_config = SFTConfig(packing=True,
+                       max_seq_length=max_seq_length,
+                       output_dir='/mnt/d/Model_Checkpoint/Llama3-Chinese-8B-Instruct-finetuned',
+                       per_device_train_batch_size=2,
+                       gradient_accumulation_steps=4,
+                       warmup_steps=10,
+                       max_steps=60,
+                       fp16=not torch.cuda.is_bf16_supported(),
+                       bf16=torch.cuda.is_bf16_supported(),
+                       logging_steps=1,
+                       optim="adamw_8bit",
+                       seed=3407,
+                       )
 
-trainer = SFTTrainer(
+train = SFTTrainer(
     model = model,
     train_dataset = dataset,
-    dataset_text_field = "query",
-    max_seq_length = max_seq_length,
-    tokenizer = tokenizer,
-    args = TrainingArguments(
-        per_device_train_batch_size = 2,
-        gradient_accumulation_steps = 4,
-        warmup_steps = 10,
-        max_steps = 60,
-        fp16 = not torch.cuda.is_bf16_supported(),
-        bf16 = torch.cuda.is_bf16_supported(),
-        logging_steps = 1,
-        output_dir = "/mnt/d/Model_Checkpoint/finetuned_llama-2-7b-bnb-4bit/",
-        optim = "adamw_8bit",
-        seed = 3407,
-    ),
+    args = sft_config,
+    tokenizer=tokenizer,
+    formatting_func=formatting_func,
 )
 
 
-trainer.train()
+train.train()
 
-model.save_pretrained_merged("/mnt/d/Model_Checkpoint/finetuned_llama-2-7b-bnb-4bit/", tokenizer, save_method="merged_16bit")
+model.save_pretrained_merged("/mnt/d/Model_Checkpoint/Llama3-Chinese-8B-Instruct-finetuned/", tokenizer, save_method="merged_16bit")
 
 # Go to https://github.com/unslothai/unsloth/wiki for advanced tips like
 # (1) Saving to GGUF / merging to 16bit for vLLM

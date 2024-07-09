@@ -1,5 +1,6 @@
 import os
 import embedding
+import faiss
 from config import get_args
 from tqdm import tqdm
 from models import *
@@ -30,11 +31,10 @@ def generate_questions(llm, nowsentence, k):
 
 def generate_answers(llm, questions, relevant_source, k):
     """根据问题，生成答案"""
-    prompt_template = f'''
-      根据下面的{k}个问题，生成对应的{k}个回答，并根据这些问题和回答构成{k}个JSON对象，每个JSON对象包含以下3个键：
-      - "query": 中文的问题，由我给你提供，其中不需要任何数字编号。
-      - "pos": 包含几个中文句子，是对于当前问题的回答，每个句子应当尽量完整。
-      - "neg": 包含几个中文句子，是跟pos意思完全相反或毫不相关的完整的句子
+    prompt_template = f'''[INST] 
+      根据下面的{k}个问题，生成对应的{k}个回答，并根据这些问题和回答构成{k}个JSON对象，每个JSON对象包含以下2个键：
+      - "user": 模拟用户提出的中文问题，由我给你提供，其中不需要任何数字编号。
+      - "response": 该字段应包含一个列表，该列表是一个完整的句子，结合下面提供的问题及其相关信息回答"user"中的问题。
 
       以下是提供的问题： 
       '{questions}'
@@ -43,10 +43,11 @@ def generate_answers(llm, questions, relevant_source, k):
 
       注意：
       - Both the query and answer should be in Chinese.
-      - 每个JSON对象的输出格式及示例：
-      {{"query": "", "pos":["", ""], "neg":["", ""]}}
-      - 请以这种格式输出{k}个JSON对象，每个对象为一行。
-        '''
+      - 生成的{k}个JSON数据应为单行格式，以便于处理和分析
+      
+      示例输出：
+      {{"user": "常见的高分子防水卷材有哪些？", "response": ["常见的高分子防水卷材包括三元乙丙、聚氯乙烯、氯化聚乙烯、氯化聚乙烯-橡胶共混及三元丁橡胶防水卷材。这些材料具有良好的防水性能，可广泛应用于建筑、隧道、地下工程等领域。"]}}
+      [/INST]'''
 
     answers = llm.get_completion(prompt_template)
 
@@ -111,48 +112,51 @@ def process_subjective_question(llm, subjective_question):
     return answers
 
 
-def get_relevant_source(questions, index, corpus, embedding_model, top_k):
+def get_relevant_source(questions, corpus, embedding_model, top_k):
     questions_embedding = embedding_model.encode([questions]).astype('float32')
-
+    index = faiss.read_index(args.knowledge_index)
     _, similar_indices = index.search(questions_embedding, top_k)
     result = []
     for i, j in enumerate(similar_indices[0]):
-        result.append(corpus[j])
+        if 0 <= j < len(corpus):
+            result.append(corpus[j])
+
     result_merge = '\n'.join(result)
 
     return result_merge
 
 
-def generate_from_corpus(llm, corpus, embedding_model, index):
+def generate_from_corpus(llm, corpus, embedding_model):
     # start to generate data
-    for sentence in tqdm(corpus[5000:5002], desc="Data Generated"):
+    for sentence in tqdm(corpus[:100], desc="Data Generated"):
         questions = generate_questions(llm, sentence, args.k)
-        relevant_source = get_relevant_source(questions, index, corpus, embedding_model, args.top_k)
+        relevant_source = get_relevant_source(questions, corpus, embedding_model, args.top_k)
         generation = generate_answers(llm, questions, relevant_source, args.k)
-        with open(os.path.join(args.data_result, 'generated_from_corpus.txt'), 'a', encoding='utf-8') as file:
+        with open(os.path.join(args.data_result, 'generated_from_corpus_2.jsonl'), 'a', encoding='utf-8') as file:
             full_text = ''.join(generation)
             file.write(full_text + '\n')
 
 
 def generate_from_choice_question(llm, examination_data):
     # start to generate data
-    for now_choice_question in tqdm(examination_data[143:], desc="Data Generated"):
+    for now_choice_question in tqdm(examination_data[135:], desc="Data Generated"):
         if 'answer' in now_choice_question and 'A' in now_choice_question['options']:
             generation = process_choice_question(llm, now_choice_question)
 
-        with open(os.path.join(args.data_result, 'generated_from_choice_question.txt'), 'a', encoding='utf-8') as file:
+        with open(os.path.join(args.data_result, 'generated_from_choice_question.jsonl'), 'a', encoding='utf-8') as file:
             full_text = ''.join(generation)
             file.write(full_text + '\n')
 
 
 def generate_from_subjective_question(llm, subjective_question):
     # start to generate data
-    for now_subjective_data in tqdm(subjective_question[158:], desc="Data Generated"):
+    for now_subjective_data in tqdm(subjective_question[437:], desc="Data Generated"):
         generation = process_subjective_question(llm, now_subjective_data)
 
         with open(os.path.join(args.data_result, 'generated_from_subjective_question.txt'), 'a', encoding='utf-8') as file:
             full_text = ''.join(generation)
             file.write(full_text + '\n')
+
 
 
 if __name__ == "__main__":
@@ -169,8 +173,9 @@ if __name__ == "__main__":
 
     # generate data from corpus
     if args.from_corpus == "True":
-        embedding_model, index, corpus = embedding.load_embedding_model(args.embedding_model, args.dimension, args.data_path)
-        generate_from_corpus(llm=llm, corpus=corpus, embedding_model=embedding_model, index=index)
+        corpus = embedding.load_sentences(args.data_path)
+        embedding_model = embedding.load_embedding_model(args.embedding_model)
+        generate_from_corpus(llm=llm, corpus=corpus, embedding_model=embedding_model)
 
     # generate data from test paper
     if args.from_choice_question == "True":

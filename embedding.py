@@ -1,8 +1,12 @@
 from FlagEmbedding import FlagModel
 import json
+from tqdm import tqdm
 import faiss
 import logging
+import config
 import numpy as np
+
+args = config.get_args()
 
 def load_embeddings(load_path):
     return np.load(load_path)
@@ -16,21 +20,33 @@ def setup_logging():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-def load_embedding_model(model_path, dimension, data_path ):
-
-    logging.info("Loading model and encoding data...")
+# multilingual-e5-large是1024维度
+def load_embedding_model(model_path):
     model = FlagModel(model_path,
-                      query_instruction_for_retrieval="为这个JSON数据生成表示以用于检索相关属性：",
+                      query_instruction_for_retrieval="检索与问题相关的内容",
                       use_fp16=True) # Setting use_fp16 to True speeds up computation with a slight performance degradation
-    sentences = load_sentences(data_path)
-    #embeddings = model.encode(sentences).astype('float32')
-    #save_embeddings(embeddings, '/content/RE-Generate/example/corpus_embeddings.npy')
-    embeddings = load_embeddings('example/corpus_embeddings.npy')
+    # logging.info(f"Model {model_path} Uploaded")
+    return model
+
+
+def create_index_knowledge_base(model_path, dimension):
+    model = load_embedding_model(model_path)
+    knowledge_sources = load_sentences(args.knowledge_source)
+
+    embeddings = []
+    for knowledge in tqdm(knowledge_sources, desc="Creating embeddings from knowledge source"):
+        embedding = model.encode(knowledge)
+        embeddings.append(embedding)
+
+    embeddings = np.array(embeddings).astype('float32')
+    save_embeddings(embeddings, args.knowledge_embedding)
+
     index = faiss.IndexFlatL2(dimension)
     index.add(embeddings)
+    faiss.write_index(index, args.knowledge_index)
+
     logging.info(f"Model {model_path} loaded and FAISS index created with {index.ntotal} vectors.")
 
-    return model, index, sentences
 
 def load_sentences(file_path):
 
@@ -46,3 +62,7 @@ def load_exam_data(file_path):
         data = [json.loads(line) for line in file]
 
     return data
+
+if __name__ == "__main__":
+    # create indexed knowledge base first
+    create_index_knowledge_base(args.embedding_model, args.dimension)
